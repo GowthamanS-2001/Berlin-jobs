@@ -172,7 +172,11 @@ def main():
     password = os.getenv("SMTP_PASSWORD")
 
     if not all([sender, recipient, smtp_host, smtp_port, username, password]):
-        print("ERROR: Missing email SMTP settings in .env", file=sys.stderr)
+        print("DEBUG: env vars visible to script")
+        for key in ["SERPAPI_KEY", "MAIL_FROM", "MAIL_TO", "SMTP_HOST", "SMTP_PORT", "SMTP_USERNAME", "SMTP_PASSWORD"]:
+        '''print(key, "=", "SET" if os.getenv(key) else "MISSING")
+
+        print("ERROR: Missing email SMTP settings in .env", file=sys.stderr)'''
         sys.exit(1)
 
     rows = search_jobs(serpapi_key)
