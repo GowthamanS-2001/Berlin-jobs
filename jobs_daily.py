@@ -54,7 +54,7 @@ def search_jobs(serpapi_key: str):
     "api_key": "3dd91fc1be83e18b600192c57984a7ac35d28ac93a0680682c2c2c54b40a0139"
             }
             search = serpapi.search(params)
-            results = search.get_dict()
+            results = search.as_dict()
             jobs = data.get("jobs_results", []) or []
             for j in jobs:
                 title = j.get("title") or ""
