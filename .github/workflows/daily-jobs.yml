@@ -3,7 +3,7 @@ name: Daily Berlin Supply Chain Jobs
 on:
   schedule:
     - cron: '0 10 * * *'   # runs daily at 10:00 UTC = 11:00 Berlin
-  workflow_dispatch:        # allows manual run from GitHub UI
+  workflow_dispatch:        
 
 jobs:
   run-script:
