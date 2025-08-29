@@ -40,7 +40,7 @@ KEYWORDS = [
 ]
 
 LOCATION = "Berlin, Germany"
-RESULTS_PER_QUERY = 20  # SerpAPI limit for google_jobs per page is typically 10; we'll paginate lightly.
+RESULTS_PER_QUERY = 20  
 PAGES_PER_QUERY = 2
 
 def search_jobs(serpapi_key: str):
@@ -51,7 +51,7 @@ def search_jobs(serpapi_key: str):
             params = {
                 "q": "entry-level supply chain procurement logistics coordinator jobs Berlin",
     "location": "Berlin, Germany",
-    "api_key": "your_serpapi_key"
+    "api_key": "3dd91fc1be83e18b600192c57984a7ac35d28ac93a0680682c2c2c54b40a0139"
             }
             search = serpapi.search(params)
             results = search.get_dict()
