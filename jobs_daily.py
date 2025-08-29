@@ -25,8 +25,6 @@ from email.mime.base import MIMEBase
 from email import encoders
 
 from dotenv import load_dotenv
-from serpapi import GoogleSearch
-
 ENTRY_LEVEL_PATTERN = re.compile(r'\\b(entry|junior|werkstudent|trainee|associate|graduate)\\b', re.IGNORECASE)
 # Words to gently prefer (not strict filter), boost if present
 PREFERRED_TERMS = re.compile(r'\\b(supply\\s*chain|procurement|logistics?\\s*coordinat(or|ion))\\b', re.IGNORECASE)
