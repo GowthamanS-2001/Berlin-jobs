@@ -17,6 +17,7 @@ import csv
 import re
 import smtplib
 import ssl
+import serpapi
 from datetime import datetime, timezone, date
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -50,16 +51,12 @@ def search_jobs(serpapi_key: str):
     for q in KEYWORDS:
         for page in range(PAGES_PER_QUERY):
             params = {
-                "engine": "google_jobs",
-                "q": q,
-                "location": LOCATION,
-                "hl": "en",
-                "gl": "de",
-                "api_key": serpapi_key,
-                "start": page * 10
+                "q": "entry-level supply chain procurement logistics coordinator jobs Berlin",
+    "location": "Berlin, Germany",
+    "api_key": "your_serpapi_key"
             }
-            search = GoogleSearch(params)
-            data = search.get_dict()
+            search = serpapi.search(params)
+            results = search.get_dict()
             jobs = data.get("jobs_results", []) or []
             for j in jobs:
                 title = j.get("title") or ""
