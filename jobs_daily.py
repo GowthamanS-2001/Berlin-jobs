@@ -50,14 +50,15 @@ def search_jobs(serpapi_key: str):
     for q in KEYWORDS:
         for page in range(PAGES_PER_QUERY):
             params = {
-               "engine": "google_jobs",
+                "engine": "google_jobs",
                 "q": q,
-                 "location": "Berlin, Germany",
+                "location": "Berlin, Germany",
                 "hl": "en",
                 "gl": "de",
-                "api_key": "3dd91fc1be83e18b600192c57984a7ac35d28ac93a0680682c2c2c54b40a0139"
-                "start": page * 10
+                "api_key": "3dd91fc1be83e18b600192c57984a7ac35d28ac93a0680682c2c2c54b40a0139",
+                "start": page * 10,
             }
+            
             search = serpapi.search(params)
             results = search.as_dict()
             jobs = results.get("jobs_results", []) or []
