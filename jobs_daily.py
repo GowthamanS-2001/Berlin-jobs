@@ -61,7 +61,7 @@ def search_jobs(serpapi_key: str):
             }
             
             search = GoogleSearch(params)
-            results = search.as_dict()
+            results = search.get_dict()
             jobs = results.get("jobs_results", []) or []
             for j in jobs:
                 title = j.get("title") or ""
