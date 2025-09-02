@@ -181,6 +181,7 @@ def main():
         sys.exit(1)
 
     rows = search_jobs(serpapi_key)
+    top_rows = rows[:20]
     send_email(top_rows, sender, recipient, smtp_host, smtp_port, username, password)
     print(f"Sent {len(top_rows)} results to {recipient}.")
 
