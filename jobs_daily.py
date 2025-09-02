@@ -17,13 +17,14 @@ import csv
 import re
 import smtplib
 import ssl
-import serpapi
+
 from datetime import datetime, timezone, date
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.base import MIMEBase
 from email import encoders
 
+from serpapi import GoogleSearch
 from dotenv import load_dotenv
 ENTRY_LEVEL_PATTERN = re.compile(r'\b(entry|junior|werkstudent|trainee|associate|graduate)\b', re.IGNORECASE)
 # Words to gently prefer (not strict filter), boost if present
@@ -59,7 +60,7 @@ def search_jobs(serpapi_key: str):
                 "start": page * 10,
             }
             
-            search = serpapi.search(params)
+            search = GoogleSearch(params)
             results = search.as_dict()
             jobs = results.get("jobs_results", []) or []
             for j in jobs:
