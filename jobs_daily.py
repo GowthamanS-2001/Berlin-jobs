@@ -25,18 +25,19 @@ from email.mime.base import MIMEBase
 from email import encoders
 
 from dotenv import load_dotenv
-ENTRY_LEVEL_PATTERN = re.compile(r'\\b(entry|junior|werkstudent|trainee|associate|graduate)\\b', re.IGNORECASE)
+ENTRY_LEVEL_PATTERN = re.compile(r'\b(entry|junior|werkstudent|trainee|associate|graduate)\b', re.IGNORECASE)
 # Words to gently prefer (not strict filter), boost if present
-PREFERRED_TERMS = re.compile(r'\\b(supply\\s*chain|procurement|logistics?\\s*coordinat(or|ion))\\b', re.IGNORECASE)
+PREFERRED_TERMS = re.compile(r'\b(supply\s*chain|procurement|logistics?\s*coordinat(or|ion))\b', re.IGNORECASE)
 
 KEYWORDS = [
-    "entry level supply chain",
-    "junior supply chain",
-    "entry level procurement",
-    "junior procurement",
+    "supply chain",
+    "procurement",
     "logistics coordinator",
-    "junior logistics",
-    "graduate supply chain",
+    "logistics",
+    "supply chain assistant",
+    "procurement coordinator",
+    "Warehouse Specialist",
+    "procurementSpecialist ",
 ]
 
 LOCATION = "Berlin, Germany"
@@ -49,9 +50,13 @@ def search_jobs(serpapi_key: str):
     for q in KEYWORDS:
         for page in range(PAGES_PER_QUERY):
             params = {
-                "q": "entry-level supply chain procurement logistics coordinator jobs Berlin",
-    "location": "Berlin, Germany",
-    "api_key": "3dd91fc1be83e18b600192c57984a7ac35d28ac93a0680682c2c2c54b40a0139"
+               "engine": "google_jobs",
+                "q": q,
+               "location": "Berlin, Germany",
+                "hl": "en",
+                "gl": "de",
+               "api_key": "3dd91fc1be83e18b600192c57984a7ac35d28ac93a0680682c2c2c54b40a0139"
+                "start": page * 10,
             }
             search = serpapi.search(params)
             results = search.as_dict()
@@ -61,6 +66,9 @@ def search_jobs(serpapi_key: str):
                 company = j.get("company_name") or j.get("company") or ""
                 via = j.get("via") or ""
                 desc = j.get("description") or ""
+                location = j.get("location") or ""
+                posted = j.get("detected_extensions", {}).get("posted_at") or ""
+                salary = j.get("detected_extensions", {}).get("salary") or ""
                 link = None
                 if isinstance(j.get("related_links"), list) and j["related_links"]:
                     link = j["related_links"][0].get("link")
@@ -72,20 +80,13 @@ def search_jobs(serpapi_key: str):
                     continue
                 seen.add(key)
 
-                # Basic entry-level filter: title OR description has entry-level signals
-                is_entry = bool(ENTRY_LEVEL_PATTERN.search(title) or ENTRY_LEVEL_PATTERN.search(desc))
-                # Accept strong keyword matches even if no explicit "entry"
-                strong_match = bool(PREFERRED_TERMS.search(title))
-                if not (is_entry or strong_match):
-                    continue
-
-                # Extract location and posted_at if available
-                loc = j.get("location") or ""
-                detected_extensions = j.get("detected_extensions") or {}
-                # Normalize posted_at into a relative string if available
-                posted_at = detected_extensions.get("posted_at") or detected_extensions.get("posted") or ""
-                # salary, via
-                salary = detected_extensions.get("salary")
+                 score = 0
+                if ENTRY_LEVEL_PATTERN.search(title) or ENTRY_LEVEL_PATTERN.search(desc):
+                    score += 3
+                if PREFERRED_TERMS.search(title):
+                    score += 2
+                if "intern" in title.lower():
+                    score += 2
 
                 row = {
                     "title": title.strip(),
@@ -98,6 +99,7 @@ def search_jobs(serpapi_key: str):
                     "query": q,
                 }
                 all_rows.append(row)
+    all_rows.sort(key=lambda r: (-r["score"], r["company"]))            
     return all_rows
 
 def to_html_table(rows):
@@ -177,22 +179,6 @@ def main():
         sys.exit(1)
 
     rows = search_jobs(serpapi_key)
-    # Basic prioritization: prefer titles with preferred terms, then most recent (if available in text), then company name
-    def score(r):
-        title = r.get("title","")
-        s = 0
-        if PREFERRED_TERMS.search(title): s += 2
-        if ENTRY_LEVEL_PATTERN.search(title): s += 1
-        # posted: boost "Just posted", "1 day ago"
-        posted = (r.get("posted") or "").lower()
-        if "just" in posted: s += 3
-        elif "day" in posted or "hour" in posted: s += 2
-        return -s  # ascending sort -> highest score first by negative
-
-    rows_sorted = sorted(rows, key=score)
-    # Limit to a tidy digest
-    top_rows = rows_sorted[:40]
-
     send_email(top_rows, sender, recipient, smtp_host, smtp_port, username, password)
     print(f"Sent {len(top_rows)} results to {recipient}.")
 
