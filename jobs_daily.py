@@ -11,179 +11,133 @@ Setup:
 3) Run: python jobs_daily.py
 4) Schedule (cron) at 11:00 Europe/Berlin.
 """
-import os
-import sys
-import csv
-import re
-import smtplib
-import ssl
-
-from datetime import datetime, timezone, date
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
-from email.mime.base import MIMEBase
-from email import encoders
-
 from serpapi import GoogleSearch
-from dotenv import load_dotenv
-ENTRY_LEVEL_PATTERN = re.compile(r'\b(entry|junior|werkstudent|trainee|associate|graduate)\b', re.IGNORECASE)
-# Words to gently prefer (not strict filter), boost if present
-PREFERRED_TERMS = re.compile(r'\b(supply\s*chain|procurement|logistics?\s*coordinat(or|ion))\b', re.IGNORECASE)
+import os, smtplib, ssl
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+from datetime import datetime
 
-KEYWORDS = [
-    "supply chain",
-    "procurement",
-    "logistics coordinator",
-    "logistics",
-    "supply chain assistant",
-    "procurement coordinator",
-    "Warehouse Specialist",
-    "procurementSpecialist ",
+QUERIES = [
+    "supply chain Berlin",
+    "procurement Berlin",
+    "logistics Berlin",
+    "operations Berlin",
 ]
 
-LOCATION = "Berlin, Germany"
-RESULTS_PER_QUERY = 20  
-PAGES_PER_QUERY = 2
+ENTRY_LEVEL_KEYWORDS = ["entry level", "junior", "graduate"]
 
-def search_jobs(serpapi_key: str):
-    all_rows = []
+def search_jobs(api_key):
+    all_results = []
+    for query in QUERIES:
+        params = {
+            "engine": "google_jobs",
+            "q": query,
+            "location": "Berlin, Germany",
+            "hl": "en",
+            "gl": "de",
+            "api_key": "3dd91fc1be83e18b600192c57984a7ac35d28ac93a0680682c2c2c54b40a0139",
+        }
+        search = GoogleSearch(params)
+        results = search.get_dict().get("jobs_results", [])
+        print(f"Fetched {len(results)} jobs for query: {query}")
+        all_results.extend(results)
+
+    print(f"Total collected jobs (before deduplication): {len(all_results)}")
+
+    # deduplicate by (title, company)
     seen = set()
-    for q in KEYWORDS:
-        for page in range(PAGES_PER_QUERY):
-            params = {
-                "engine": "google_jobs",
-                "q": q,
-                "location": "Berlin, Germany",
-                "hl": "en",
-                "gl": "de",
-                "api_key": "3dd91fc1be83e18b600192c57984a7ac35d28ac93a0680682c2c2c54b40a0139",
-                "start": page * 10,
-            }
-            
-            search = GoogleSearch(params)
-            results = search.get_dict()
-            jobs = results.get("jobs_results", []) or []
-            for j in jobs:
-                title = j.get("title") or ""
-                company = j.get("company_name") or j.get("company") or ""
-                via = j.get("via") or ""
-                desc = j.get("description") or ""
-                location = j.get("location") or ""
-                posted = j.get("detected_extensions", {}).get("posted_at") or ""
-                salary = j.get("detected_extensions", {}).get("salary") or ""
-                link = None
-                if isinstance(j.get("related_links"), list) and j["related_links"]:
-                    link = j["related_links"][0].get("link")
-                if not link:
-                    link = j.get("share_link") or j.get("job_id")
+    unique_jobs = []
+    for job in all_results:
+        key = (job.get("title"), job.get("company_name"))
+        if key not in seen:
+            seen.add(key)
+            unique_jobs.append(job)
 
-                key = (title.strip(), company.strip(), link)
-                if key in seen:
-                    continue
-                seen.add(key)
+    print(f"Unique jobs after deduplication: {len(unique_jobs)}")
 
-                score = 0
-                if ENTRY_LEVEL_PATTERN.search(title) or ENTRY_LEVEL_PATTERN.search(desc):
-                    score += 3
-                if PREFERRED_TERMS.search(title):
-                    score += 2
-                if "intern" in title.lower():
-                    score += 2
+    # sort by recency
+    def job_age(job):
+        ext = job.get("detected_extensions", {})
+        if "posted_at_days_ago" in ext:
+            return ext["posted_at_days_ago"]
+        elif "posted_at" in ext and "day" in ext["posted_at"]:
+            # fallback if "3 days ago" style string
+            try:
+                return int(ext["posted_at"].split()[0])
+            except:
+                return 999
+        return 999  # assume old if unknown
 
-                row = {
-                    "title": title.strip(),
-                    "company": company.strip(),
-                    "location": loc.strip(),
-                    "source": via,
-                    "link": link,
-                    "posted": posted_at,
-                    "salary": salary,
-                    "query": q,
-                }
-                all_rows.append(row)
-    all_rows.sort(key=lambda r: (-r["score"], r["company"]))            
-    return all_rows
+    unique_jobs.sort(key=job_age)  # lowest days_ago = most recent
+    return unique_jobs
 
-def to_html_table(rows):
-    # Minimalist HTML table
-    head = """<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;font-family:Arial,sans-serif;font-size:14px;">
-<tr><th>Title</th><th>Company</th><th>Location</th><th>Posted</th><th>Source</th><th>Link</th></tr>
-"""
-    body = []
-    for r in rows:
-        link_html = f'<a href="{r["link"]}">View</a>' if r.get("link") else ""
-        body.append(
-            f"<tr>"
-            f"<td>{r.get('title','')}</td>"
-            f"<td>{r.get('company','')}</td>"
-            f"<td>{r.get('location','')}</td>"
-            f"<td>{r.get('posted','')}</td>"
-            f"<td>{r.get('source','')}</td>"
-            f"<td>{link_html}</td>"
-            f"</tr>"
-        )
-    return head + "\\n".join(body) + "</table>"
 
-def send_email(rows, sender, recipient, smtp_host, smtp_port, username, password):
-    today = date.today().isoformat()
-    subject = f"Berlin Entry-Level Supply Chain Jobs — {today}"
+def split_entry_level(jobs):
+    entry, others = [], []
+    for job in jobs:
+        title = job.get("title", "").lower()
+        if any(k in title for k in ENTRY_LEVEL_KEYWORDS):
+            entry.append(job)
+        else:
+            others.append(job)
+    return entry, others
 
-    msg = MIMEMultipart()
+
+def send_email(jobs_entry, jobs_other, sender, recipient, smtp_host, smtp_port, username, password):
+    today = datetime.today().strftime("%Y-%m-%d")
+    subject = f"Daily Berlin Supply Chain Digest ({today})"
+
+    html = f"<h2>Daily digest for Berlin ({today})</h2>"
+
+    if jobs_entry:
+        html += "<h3>🎯 Entry-level roles</h3><ul>"
+        for job in jobs_entry[:15]:
+            html += f"<li><b>{job.get('title')}</b> - {job.get('company_name')}<br>"
+            if "link" in job:
+                html += f"<a href='{job['link']}'>Apply here</a></li>"
+        html += "</ul>"
+    else:
+        html += "<p>No entry-level roles found today.</p>"
+
+    if jobs_other:
+        html += "<h3>📌 Other recent roles</h3><ul>"
+        for job in jobs_other[:20]:
+            html += f"<li><b>{job.get('title')}</b> - {job.get('company_name')}<br>"
+            if "link" in job:
+                html += f"<a href='{job['link']}'>Apply here</a></li>"
+        html += "</ul>"
+    else:
+        html += "<p>No other roles found.</p>"
+
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = subject
     msg["From"] = sender
     msg["To"] = recipient
-    msg["Subject"] = subject
-
-    intro = f"<p>Daily digest for entry-level Supply Chain / Procurement / Logistics Coordinator roles in Berlin ({today}).</p>"
-    if not rows:
-        html = intro + "<p>No matching roles found today.</p>"
-    else:
-        html = intro + to_html_table(rows)
-
     msg.attach(MIMEText(html, "html"))
 
-    # Attach CSV
-    csv_path = os.path.join(os.getcwd(), f"jobs_{today}.csv")
-    with open(csv_path, "w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=["title","company","location","posted","source","link","query","salary"])
-        writer.writeheader()
-        writer.writerows(rows)
-
-    with open(csv_path, "rb") as f:
-        part = MIMEBase("application", "octet-stream")
-        part.set_payload(f.read())
-    encoders.encode_base64(part)
-    part.add_header("Content-Disposition", f'attachment; filename="{os.path.basename(csv_path)}"')
-    msg.attach(part)
-
     context = ssl.create_default_context()
-    with smtplib.SMTP(smtp_host, int(smtp_port)) as server:
-        server.starttls(context=context)
+    with smtplib.SMTP_SSL(smtp_host, int(smtp_port), context=context) as server:
         server.login(username, password)
-        server.send_message(msg)
+        server.sendmail(sender, recipient, msg.as_string())
+
 
 def main():
-    load_dotenv()
-    serpapi_key = os.getenv("SERPAPI_KEY")
-    if not serpapi_key:
-        print("ERROR: SERPAPI_KEY not set in environment (.env).", file=sys.stderr)
-        sys.exit(1)
+    serpapi_key = os.environ["SERPAPI_KEY"]
+    sender = os.environ["MAIL_FROM"]
+    recipient = os.environ["MAIL_TO"]
+    smtp_host = os.environ["SMTP_HOST"]
+    smtp_port = os.environ["SMTP_PORT"]
+    username = os.environ["SMTP_USERNAME"]
+    password = os.environ["SMTP_PASSWORD"]
 
-    sender = os.getenv("MAIL_FROM")
-    recipient = os.getenv("MAIL_TO")
-    smtp_host = os.getenv("SMTP_HOST", "smtp.gmail.com")
-    smtp_port = os.getenv("SMTP_PORT", "587")
-    username = os.getenv("SMTP_USERNAME") or sender
-    password = os.getenv("SMTP_PASSWORD")
+    jobs = search_jobs(serpapi_key)
+    entry_jobs, other_jobs = split_entry_level(jobs)
 
-    if not all([sender, recipient, smtp_host, smtp_port, username, password]):
-        print(key, "=", "SET" if os.getenv(key) else "MISSING")
-        print("ERROR: Missing email SMTP settings in .env", file=sys.stderr)
-        sys.exit(1)
+    send_email(entry_jobs, other_jobs, sender, recipient, smtp_host, smtp_port, username, password)
 
-    rows = search_jobs(serpapi_key)
-    top_rows = rows[:20]
-    send_email(top_rows, sender, recipient, smtp_host, smtp_port, username, password)
-    print(f"Sent {len(top_rows)} results to {recipient}.")
 
 if __name__ == "__main__":
     main()
+
+          
+   
