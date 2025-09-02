@@ -56,7 +56,6 @@ def search_jobs(serpapi_key: str):
                 "hl": "en",
                 "gl": "de",
                "api_key": "3dd91fc1be83e18b600192c57984a7ac35d28ac93a0680682c2c2c54b40a0139"
-                "start": page * 10,
             }
             search = serpapi.search(params)
             results = search.as_dict()
