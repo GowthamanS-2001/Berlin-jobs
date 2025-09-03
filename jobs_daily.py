@@ -116,9 +116,18 @@ def send_email(jobs_entry, jobs_other, sender, recipient, smtp_host, smtp_port, 
     msg.attach(MIMEText(html, "html"))
 
     context = ssl.create_default_context()
-    with smtplib.SMTP_SSL(smtp_host, int(smtp_port), context=context) as server:
-        server.login(username, password)
-        server.sendmail(sender, recipient, msg.as_string())
+
+    if int(smtp_port) == 465:
+        # SSL/TLS
+        with smtplib.SMTP_SSL(smtp_host, int(smtp_port), context=context) as server:
+            server.login(username, password)
+            server.sendmail(sender, recipient, msg.as_string())
+    else:
+        # STARTTLS (e.g., port 587)
+        with smtplib.SMTP(smtp_host, int(smtp_port)) as server:
+            server.starttls(context=context)
+            server.login(username, password)
+            server.sendmail(sender, recipient, msg.as_string())
 
 
 def main():
